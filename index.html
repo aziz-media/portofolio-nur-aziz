@@ -195,8 +195,29 @@ input[type=file]{display:none;}
 .photo-card img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;transition:transform .35s;}
 .photo-card:hover img{transform:scale(1.05);}
 .photo-year{position:absolute;top:6px;left:6px;background:rgba(20,18,12,0.68);color:#fdfaf3;font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:20px;letter-spacing:0.03em;}
+.photo-actions{position:absolute;top:6px;right:6px;display:flex;gap:6px;opacity:0;transition:opacity .2s;}
+.photo-card:hover .photo-actions{opacity:1;}
+.icon-btn{width:26px;height:26px;background:rgba(20,18,12,0.72);border:1px solid rgba(255,255,255,0.18);border-radius:var(--radius);color:#fdfaf3;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;}
+.icon-btn:hover{color:#e6c877;}
 .photo-cap{position:absolute;bottom:0;left:0;right:0;padding:20px 10px 8px;font-size:11.5px;background:linear-gradient(transparent,rgba(0,0,0,0.78));color:#fdfaf3;}
 .empty-state{border:1px dashed var(--line);border-radius:var(--radius);padding:52px 24px;text-align:center;color:var(--ink-faint);font-size:14px;grid-column:1/-1;}
+
+/* Photo upload modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(20,18,12,0.55);z-index:110;display:none;align-items:center;justify-content:center;padding:24px;}
+.modal-overlay.open{display:flex;}
+.modal-panel{background:var(--panel);border-radius:var(--radius);max-width:640px;width:100%;display:grid;grid-template-columns:200px 1fr;overflow:hidden;box-shadow:var(--shadow-md);}
+.modal-preview{background:var(--panel-2);}
+.modal-preview img{width:100%;height:100%;object-fit:cover;display:block;min-height:240px;}
+.modal-form{padding:26px 28px;display:flex;flex-direction:column;}
+.modal-form h3{font-size:19px;margin-bottom:4px;}
+.modal-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-faint);margin:12px 0 6px;}
+.modal-input{
+  width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;
+  color:var(--ink);font-family:'Manrope',sans-serif;font-size:14px;resize:vertical;
+}
+.modal-input:focus{outline:none;border-color:var(--brass);}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+@media(max-width:560px){.modal-panel{grid-template-columns:1fr;}.modal-preview img{min-height:170px;}}
 
 /* Kontak */
 .kontak-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;}
@@ -222,6 +243,23 @@ footer .fnote{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--i
 
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease, transform .6s ease;}
 .reveal.in{opacity:1;transform:translateY(0);}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel);border:1px solid var(--line);
+  color:var(--ink);padding:12px 20px;border-radius:var(--radius);font-size:13.5px;z-index:200;opacity:0;transition:all .3s;pointer-events:none;max-width:80vw;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* Owner-only controls: hidden for visitors, revealed only after owner unlocks the page */
+.owner-control{display:none;}
+body.owner-mode .owner-control{display:inline-flex;}
+body.owner-mode .photo-actions.owner-control{display:flex;}
+.owner-toggle{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.04em;color:var(--ink-faint);
+  background:none;border:1px solid var(--line);border-radius:20px;padding:6px 14px;cursor:pointer;transition:color .2s,border-color .2s;
+}
+.owner-toggle:hover{color:var(--brass);border-color:var(--brass);}
+.owner-toggle.active{color:var(--emerald);border-color:var(--emerald-line);}
 </style>
 </head>
 <body>
@@ -392,6 +430,8 @@ footer .fnote{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--i
     </div>
     <div class="gallery-toolbar reveal">
       <span class="hint" id="galleryCount">Memuat galeri…</span>
+      <button class="btn owner-control" id="addPhotoBtn" type="button">+ Tambah Foto</button>
+      <input type="file" id="photoInput" accept="image/*" multiple style="display:none;">
     </div>
     <div class="gallery-groups reveal" id="galleryGrid"></div>
   </div>
@@ -422,6 +462,7 @@ footer .fnote{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--i
       <span class="fnote">© 2026 MUHAMMAD NUR AZIZ</span>
       <span class="fnote" style="margin-left:14px;">SUPERVISOR OPERASIONAL — BEKASI, ID</span>
     </div>
+    <button class="owner-toggle" id="ownerToggle" type="button">🔒 Kelola Halaman</button>
   </div>
 </footer>
 
@@ -429,6 +470,25 @@ footer .fnote{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--i
   <button class="lightbox-close" id="lightboxClose">✕</button>
   <img id="lightboxImg" src="" alt="">
 </div>
+
+<div class="modal-overlay" id="photoModal">
+  <div class="modal-panel">
+    <div class="modal-preview"><img id="modalImg" src="" alt=""></div>
+    <div class="modal-form">
+      <h3 id="modalTitle">Detail Foto</h3>
+      <label class="modal-label" for="modalCompany">Pekerjaan</label>
+      <select id="modalCompany" class="modal-input"></select>
+      <label class="modal-label" for="modalCaption">Cerita di balik foto ini</label>
+      <textarea id="modalCaption" class="modal-input" rows="3" placeholder="Contoh: Inspeksi rutin lini Corrugator bersama tim shift pagi."></textarea>
+      <div class="modal-actions">
+        <button class="btn ghost" id="modalCancel" type="button">Lewati</button>
+        <button class="btn" id="modalSave" type="button">Unggah Foto</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 // ---------- Nav ----------
@@ -444,22 +504,21 @@ const io = new IntersectionObserver((entries) => {
 }, {threshold:0.12});
 revealEls.forEach(el => io.observe(el));
 
-// ---------- Gallery data ----------
-// Situs ini kini berjalan statis (di-hosting sendiri), jadi foto tidak lagi diunggah lewat
-// browser — tempelkan data foto di array PHOTOS di bawah ini setiap kali ingin menambah/mengubah.
-// Contoh satu entri:
-// { company:'dmb', caption:'Melakukan pengecekan siku pada saat palet...', src:'foto/dmb-01.jpg' }
-// - company salah satu dari: 'dmb' (Duta Mitra Bersama), 'aps' (Ayu Puspita Sejahtera), 'sea' (Sadhana Ekapraya Amitra)
-// - src adalah path relatif ke file foto di dalam folder yang sama dengan halaman ini.
-const PHOTOS = [
-  // { company:'dmb', caption:'', src:'foto/contoh.jpg' },
-];
+// ---------- Gallery (tersimpan di repo GitHub lewat GitHub API) ----------
+// photos.json di root repo menyimpan daftar foto. Halaman ini membaca file itu saat dibuka,
+// dan — jika Anda masuk sebagai pemilik — bisa menambah/menghapus foto langsung dari browser,
+// yang akan otomatis melakukan commit ke repo Anda.
+const GH_OWNER = location.hostname.split('.')[0];
+const GH_REPO = location.pathname.split('/').filter(Boolean)[0] || (GH_OWNER + '.github.io');
+const GH_BRANCH = 'main'; // ganti ke 'master' di sini jika branch utama repo Anda bernama master
 
 const COMPANIES = [
   {id:'dmb', name:'PT Duta Mitra Bersama', role:'Supervisor Operasional', range:'Ags 2024 — Sekarang'},
   {id:'aps', name:'PT Ayu Puspita Sejahtera', role:'Supervisor Operasional', range:'Ags 2023 — Ags 2024'},
   {id:'sea', name:'PT Sadhana Ekapraya Amitra', role:'Spv. Operasional RPMC', range:'Ags 2019 — Ags 2023'}
 ];
+let PHOTOS = [];
+let ghToken = null;
 
 const galleryGrid = document.getElementById('galleryGrid');
 const galleryCount = document.getElementById('galleryCount');
@@ -467,6 +526,51 @@ const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightboxImg');
 document.getElementById('lightboxClose').addEventListener('click', () => lightbox.classList.remove('open'));
 lightbox.addEventListener('click', (e) => { if(e.target === lightbox) lightbox.classList.remove('open'); });
+
+function toast(msg, isError){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = isError ? '#b3453f' : 'var(--line)';
+  t.style.color = isError ? '#b3453f' : 'var(--ink)';
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3400);
+}
+
+async function ghApi(path, options){
+  const res = await fetch('https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + path, {
+    ...options,
+    headers: {
+      'Authorization': 'Bearer ' + ghToken,
+      'Accept': 'application/vnd.github+json',
+      ...(options && options.headers ? options.headers : {})
+    }
+  });
+  if(!res.ok){
+    const body = await res.json().catch(() => ({}));
+    throw new Error(res.status + ': ' + (body.message || 'Permintaan ke GitHub gagal'));
+  }
+  return res.json();
+}
+function toBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
+function fromBase64(str){ return decodeURIComponent(escape(atob(str))); }
+
+async function fetchPhotosJson(){
+  // Ambil versi terbaru langsung dari GitHub API (bukan dari CDN Pages) agar owner selalu
+  // melihat data terkini, termasuk sha-nya untuk keperluan commit berikutnya.
+  const data = await ghApi('/contents/photos.json?ref=' + GH_BRANCH, {});
+  return {sha: data.sha, list: JSON.parse(fromBase64(data.content))};
+}
+
+async function loadGallery(){
+  try{
+    const res = await fetch('photos.json?t=' + Date.now());
+    PHOTOS = res.ok ? await res.json() : [];
+  }catch(err){
+    PHOTOS = [];
+  }
+  renderGallery();
+}
 
 function renderGallery(){
   galleryGrid.innerHTML = '';
@@ -477,7 +581,7 @@ function renderGallery(){
   }
   galleryCount.textContent = PHOTOS.length + ' foto';
   COMPANIES.forEach(comp => {
-    const group = PHOTOS.filter(p => p.company === comp.id);
+    const group = PHOTOS.filter(p => p.company === comp.id).slice().reverse();
     if(!group.length) return;
     galleryGrid.appendChild(buildGroupSection(comp, group));
   });
@@ -518,6 +622,32 @@ function buildPhotoCard(p){
   badge.textContent = 'Doc. Nur Aziz';
   card.appendChild(badge);
 
+  const actions = document.createElement('div');
+  actions.className = 'photo-actions owner-control';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'icon-btn'; delBtn.title = 'Hapus foto'; delBtn.textContent = '✕';
+  delBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if(!confirm('Hapus foto ini dari galeri?')) return;
+    try{
+      const {sha} = await fetchPhotosJson();
+      const updated = PHOTOS.filter(x => x.src !== p.src);
+      await ghApi('/contents/photos.json', {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: 'Hapus foto galeri: ' + p.src,
+          content: toBase64(JSON.stringify(updated, null, 2)),
+          sha, branch: GH_BRANCH
+        })
+      });
+      PHOTOS = updated;
+      renderGallery();
+      toast('Foto dihapus');
+    }catch(err){ toast('Gagal menghapus: ' + err.message, true); }
+  });
+  actions.appendChild(delBtn);
+  card.appendChild(actions);
+
   if(p.caption){
     const cap = document.createElement('div');
     cap.className = 'photo-cap';
@@ -527,7 +657,124 @@ function buildPhotoCard(p){
   return card;
 }
 
-renderGallery();
+function compressImage(file, maxW = 1600, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if(w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Gagal memuat gambar'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Gagal membaca berkas'));
+    reader.readAsDataURL(file);
+  });
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+// -- Owner mode --
+const ownerToggle = document.getElementById('ownerToggle');
+function applyOwnerMode(){
+  document.body.classList.toggle('owner-mode', !!ghToken);
+  ownerToggle.classList.toggle('active', !!ghToken);
+  ownerToggle.textContent = ghToken ? '🔓 Mode Pemilik Aktif — Keluar' : '🔒 Kelola Halaman';
+}
+ownerToggle.addEventListener('click', () => {
+  if(ghToken){
+    ghToken = null;
+    applyOwnerMode();
+    toast('Mode pemilik dinonaktifkan');
+    return;
+  }
+  const input = prompt('Masukkan GitHub Personal Access Token Anda (izin Contents: Read & write pada repo ini):');
+  if(!input) return;
+  ghToken = input.trim();
+  applyOwnerMode();
+  toast('Mode pemilik aktif — Anda kini bisa menambah & menghapus foto');
+});
+applyOwnerMode();
+
+// -- Upload modal --
+const photoModal = document.getElementById('photoModal');
+const modalImg = document.getElementById('modalImg');
+const modalCompany = document.getElementById('modalCompany');
+const modalCaption = document.getElementById('modalCaption');
+const modalSave = document.getElementById('modalSave');
+const modalCancel = document.getElementById('modalCancel');
+let resolveModal = null;
+modalCompany.innerHTML = COMPANIES.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+function openPhotoModal(dataUrl){
+  return new Promise((resolve) => {
+    resolveModal = resolve;
+    modalImg.src = dataUrl;
+    modalCompany.value = COMPANIES[0].id;
+    modalCaption.value = '';
+    photoModal.classList.add('open');
+  });
+}
+function closePhotoModal(result){
+  photoModal.classList.remove('open');
+  if(resolveModal){ resolveModal(result); resolveModal = null; }
+}
+modalSave.addEventListener('click', () => closePhotoModal({company: modalCompany.value, caption: modalCaption.value.trim()}));
+modalCancel.addEventListener('click', () => closePhotoModal(null));
+photoModal.addEventListener('click', (e) => { if(e.target === photoModal) closePhotoModal(null); });
+
+const addPhotoBtn = document.getElementById('addPhotoBtn');
+const photoInput = document.getElementById('photoInput');
+addPhotoBtn.addEventListener('click', () => photoInput.click());
+
+photoInput.addEventListener('change', async () => {
+  const files = Array.from(photoInput.files || []);
+  if(files.length === 0) return;
+  if(!ghToken){ toast('Masuk sebagai pemilik dahulu', true); return; }
+  let saved = 0;
+  for(const file of files){
+    try{
+      const dataUrl = await compressImage(file);
+      const details = await openPhotoModal(dataUrl);
+      if(!details) continue;
+      const base64Data = dataUrl.split(',')[1];
+      const sizeBytes = base64Data.length * 0.75;
+      if(sizeBytes > 1024 * 1024){
+        toast('"' + file.name + '" masih terlalu besar setelah dikompres — dilewati', true);
+        continue;
+      }
+      const filename = 'foto/' + Date.now() + '-' + uid() + '.jpg';
+      await ghApi('/contents/' + filename, {
+        method: 'PUT',
+        body: JSON.stringify({message: 'Tambah foto galeri: ' + filename, content: base64Data, branch: GH_BRANCH})
+      });
+      const {sha, list} = await fetchPhotosJson();
+      const updated = [...list, {company: details.company, caption: details.caption, src: filename}];
+      await ghApi('/contents/photos.json', {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: 'Perbarui photos.json',
+          content: toBase64(JSON.stringify(updated, null, 2)),
+          sha, branch: GH_BRANCH
+        })
+      });
+      PHOTOS = updated;
+      renderGallery();
+      saved++;
+    }catch(err){
+      toast('Gagal mengunggah "' + file.name + '": ' + err.message, true);
+    }
+  }
+  photoInput.value = '';
+  if(saved) toast(saved + ' foto berhasil diunggah ke repo Anda');
+});
+
+loadGallery();
 
 </script>
 </body>
